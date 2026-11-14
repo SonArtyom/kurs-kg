@@ -60,5 +60,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" Converter.apk --title "Converter $GITHUB_REF_NAME" \
-            --notes "Конвертер валют по официальному курсу НБКР (RU/EN, калькулятор в полях). Скачайте Converter.apk и установите на Android." \
+            --notes "Currency converter using official NBKR rates (RU/EN UI, calculator in amount fields). Download Converter.apk and install it on Android." \
             || gh release upload "$GITHUB_REF_NAME" Converter.apk --clobber

@@ -18,9 +18,9 @@ function toIsoDate(d: string): string | null {
 /** Parse an NBKR CurrencyRates XML document. Throws on malformed input. */
 export function parseNbkrXml(xml: string): Feed {
   const root = /<CurrencyRates\b[^>]*\bDate="([^"]+)"/.exec(xml);
-  if (!root) throw new Error('NBKR: нет элемента CurrencyRates');
+  if (!root) throw new Error('NBKR: no CurrencyRates element');
   const date = toIsoDate(root[1]);
-  if (!date) throw new Error(`NBKR: неверная дата "${root[1]}"`);
+  if (!date) throw new Error(`NBKR: invalid date "${root[1]}"`);
 
   const rates: Record<string, Rate> = {};
   const re = /<Currency\b[^>]*\bISOCode="([A-Z]{3})"[^>]*>([\s\S]*?)<\/Currency>/g;
@@ -34,7 +34,7 @@ export function parseNbkrXml(xml: string): Feed {
     if (v === null || v <= 0n || n <= 0n) continue;
     rates[m[1]] = { value: v, nominal: n };
   }
-  if (Object.keys(rates).length === 0) throw new Error('NBKR: в ответе нет курсов');
+  if (Object.keys(rates).length === 0) throw new Error('NBKR: no rates in response');
   return { date, rates };
 }
 
