@@ -1,0 +1,64 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed APK
+        working-directory: android
+        env:
+          KURSKG_KEYSTORE: ${{ runner.temp }}/release.jks
+          KURSKG_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KURSKG_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KURSKG_KEY_ALIAS: kurskg
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/KursKG.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KursKG-apk
+          path: KursKG.apk
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" KursKG.apk --title "Курс НБКР $GITHUB_REF_NAME" \
+            --notes "Конвертер валют по официальному курсу НБКР. Скачайте KursKG.apk и установите на Android." \
+            || gh release upload "$GITHUB_REF_NAME" KursKG.apk --clobber
