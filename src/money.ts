@@ -41,15 +41,19 @@ export function divRound(num: bigint, den: bigint): bigint {
  * Result is in minor units with `digits` decimal places, rounded once, half-up.
  */
 export function convert(amount: bigint, from: Rate, to: Rate, digits: number): bigint {
-  const num = amount * from.value * to.nominal * 10n ** BigInt(digits);
+  const neg = amount < 0n;
+  const num = (neg ? -amount : amount) * from.value * to.nominal * 10n ** BigInt(digits);
   const den = SCALE * from.nominal * to.value;
-  return divRound(num, den);
+  const r = divRound(num, den);
+  return neg ? -r : r;
 }
 
 export interface Converted {
   minor: bigint;
   digits: number;
 }
+
+const abs = (x: bigint) => (x < 0n ? -x : x);
 
 /**
  * Convert and, if the result is tiny (fewer than 2 significant digits at the
@@ -58,59 +62,47 @@ export interface Converted {
 export function convertForDisplay(amount: bigint, from: Rate, to: Rate, digits: number): Converted {
   let d = digits;
   let minor = convert(amount, from, to, d);
-  while (amount > 0n && minor < 10n && d < SCALE_DIGITS) {
+  while (amount !== 0n && abs(minor) < 10n && d < SCALE_DIGITS) {
     d++;
     minor = convert(amount, from, to, d);
   }
   return { minor, digits: d };
 }
 
-const groupFmt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+// ---------- locale-aware display ----------
+export type NumLocale = 'ru' | 'en';
+let groupFmt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+let decSep = ',';
 
-/** "1 234 567,89". Trailing zero fraction is dropped entirely; otherwise the fraction is kept at its precision. */
+export function setNumberLocale(l: NumLocale) {
+  groupFmt = new Intl.NumberFormat(l === 'ru' ? 'ru-RU' : 'en-US', { maximumFractionDigits: 0 });
+  decSep = l === 'ru' ? ',' : '.';
+}
+export const decimalSeparator = () => decSep;
+
+/** "1 234 567,89" (ru) / "1,234,567.89" (en). A zero fraction is dropped; otherwise kept at its precision. */
 export function formatMinor({ minor, digits }: Converted, keepZeros = true): string {
+  const neg = minor < 0n;
+  const m = abs(minor);
   const p = 10n ** BigInt(digits);
-  const whole = minor / p;
-  let frac = digits > 0 ? (minor % p).toString().padStart(digits, '0') : '';
+  let frac = digits > 0 ? (m % p).toString().padStart(digits, '0') : '';
   if (!keepZeros) frac = frac.replace(/0+$/, '');
   if (/^0*$/.test(frac)) frac = '';
-  return groupFmt.format(whole) + (frac ? ',' + frac : '');
+  return (neg ? '−' : '') + groupFmt.format(m / p) + (frac ? decSep + frac : '');
 }
 
-/** Plain editable form of a value, e.g. "1234,5" (no grouping, no trailing zeros). */
-export function toInput(c: Converted): string {
-  return formatMinor(c, false).replace(/[\s  ]/g, '');
+/** Plain editable form of a value in the internal raw format, e.g. "1234,5" (comma decimal, no grouping). */
+export function toInput({ minor, digits }: Converted): string {
+  const m = abs(minor);
+  const p = 10n ** BigInt(digits);
+  const frac = digits > 0 ? (m % p).toString().padStart(digits, '0').replace(/0+$/, '') : '';
+  return (minor < 0n ? '−' : '') + (m / p).toString() + (frac ? ',' + frac : '');
 }
 
-/** Group the integer part of a raw input string while keeping what the user typed after the comma. */
+/** Display one raw number token ("12345,5") grouped, keeping what was typed after the comma. */
 export function formatInput(raw: string): string {
   if (raw === '') return '';
   const [w, f] = raw.split(',');
   const whole = groupFmt.format(BigInt(w === '' ? '0' : w));
-  return f === undefined ? whole : `${whole},${f}`;
-}
-
-/** Apply a keypad key to the raw input string. */
-export function applyKey(raw: string, key: string, maxFrac: number): string {
-  const f = raw.split(',')[1];
-  if (key === 'C') return '';
-  if (key === '⌫') return raw.slice(0, -1);
-  if (key === ',') {
-    if (maxFrac === 0 || f !== undefined) return raw;
-    return (raw === '' ? '0' : raw) + ',';
-  }
-  if (!/^\d+$/.test(key)) return raw;
-  let next = raw;
-  for (const ch of key) {
-    const [nw, nf] = next.split(',');
-    if (nf !== undefined) {
-      if (nf.length >= Math.max(maxFrac, f?.length ?? 0)) break;
-      next += ch;
-    } else {
-      if (nw === '0') next = ch;
-      else if (nw.length >= 12) break;
-      else next += ch;
-    }
-  }
-  return next;
+  return f === undefined ? whole : whole + decSep + f;
 }

@@ -6,14 +6,17 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0d0f12" media="(prefers-color-scheme: dark)" />
-    <title>Курс НБКР</title>
+    <title>Converter</title>
   </head>
   <body>
     <div id="app">
       <header class="top">
         <div class="top-row">
-          <h1>Курс НБКР</h1>
-          <button id="edit" class="link-btn" type="button">Изменить</button>
+          <h1>Converter</h1>
+          <div class="top-actions">
+            <button id="lang" class="lang-btn" type="button">EN</button>
+            <button id="edit" class="link-btn" type="button">Изменить</button>
+          </div>
         </div>
         <button id="status" class="status" type="button" aria-live="polite">
           <span class="dot"></span><span class="status-text">Загрузка…</span>
@@ -26,7 +29,7 @@
       <div class="sheet-backdrop"></div>
       <section class="sheet-body" role="dialog" aria-label="Добавить валюту">
         <div class="sheet-head">
-          <h2>Добавить валюту</h2>
+          <h2 id="sheet-title">Добавить валюту</h2>
           <button id="sheet-close" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
         </div>
         <input id="search" class="search" type="search" placeholder="Поиск: код или название" autocomplete="off" />

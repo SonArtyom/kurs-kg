@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyKey,
   convert,
   convertForDisplay,
   divRound,
@@ -9,6 +8,7 @@ import {
   KGS_RATE,
   parseDecimal,
   SCALE,
+  setNumberLocale,
   toInput,
   type Rate,
 } from '../src/money';
@@ -118,27 +118,23 @@ describe('formatting', () => {
   });
 });
 
-describe('applyKey', () => {
-  it('types digits and a comma', () => {
-    let s = '';
-    for (const k of ['1', '2', ',', '5']) s = applyKey(s, k, 2);
-    expect(s).toBe('12,5');
+describe('signed values', () => {
+  it('converts and formats negatives', () => {
+    const c = convertForDisplay(-100n * SCALE, USD, KGS_RATE, 2);
+    expect(c.minor).toBe(-874355n);
+    expect(plain(formatMinor(c))).toBe('−8 743,55');
+    expect(toInput(c)).toBe('−8743,55');
   });
-  it('limits fraction digits to the currency precision', () => {
-    expect(applyKey('1,25', '9', 2)).toBe('1,25');
-    expect(applyKey('1', ',', 0)).toBe('1');
-  });
-  it('replaces a leading zero and prefixes a lone comma', () => {
-    expect(applyKey('0', '7', 2)).toBe('7');
-    expect(applyKey('', ',', 2)).toBe('0,');
-    expect(applyKey('', '00', 2)).toBe('0');
-    expect(applyKey('5', '00', 2)).toBe('500');
-  });
-  it('backspace and clear', () => {
-    expect(applyKey('123', '⌫', 2)).toBe('12');
-    expect(applyKey('123', 'C', 2)).toBe('');
-  });
-  it('caps integer part at 12 digits', () => {
-    expect(applyKey('999999999999', '1', 2)).toBe('999999999999');
+});
+
+describe('english number format', () => {
+  it('uses comma grouping and dot decimals', () => {
+    setNumberLocale('en');
+    try {
+      expect(formatMinor({ minor: 123456789n, digits: 2 })).toBe('1,234,567.89');
+      expect(formatInput('1000,5')).toBe('1,000.5');
+    } finally {
+      setNumberLocale('ru');
+    }
   });
 });

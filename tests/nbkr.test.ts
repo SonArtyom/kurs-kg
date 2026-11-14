@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseNbkrXml } from '../src/nbkr';
+import { currencyName } from '../src/currencies';
 import { deserialize, isStale, merge, serialize, type RatesCache } from '../src/rates';
 import { KGS_RATE } from '../src/money';
 
@@ -96,5 +97,14 @@ describe('rates cache', () => {
     expect(isStale(c, Date.parse('2026-11-14T12:00:00'))).toBe(false);
     expect(isStale(c, Date.parse('2026-11-15T12:00:00'))).toBe(true);
     expect(isStale({ ...c, fetchedAt: 0 }, Date.parse('2026-11-14T12:00:00'))).toBe(true);
+  });
+});
+
+describe('currency names', () => {
+  it('ru and en', () => {
+    expect(currencyName('KGS', 'ru')).toBe('Кыргызский сом');
+    expect(currencyName('KGS', 'en')).toBe('Kyrgyz som');
+    expect(currencyName('USD', 'en')).toBe('US Dollar');
+    expect(currencyName('XDR', 'en')).toBe('SDR (IMF)');
   });
 });

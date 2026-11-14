@@ -1,23 +1,35 @@
 // Currency metadata derived from Intl (no bundled tables needed).
 
-export const DEFAULT_CODES = ['KGS', 'USD', 'EUR', 'RUB', 'KZT', 'CNY', 'TRY'];
+export const DEFAULT_CODES = ['KGS', 'USD', 'EUR', 'RUB', 'KZT', 'KRW', 'JPY'];
+/** Default set of v1.0.0; saved states equal to it are moved to the new default. */
+export const OLD_DEFAULT_CODES = ['KGS', 'USD', 'EUR', 'RUB', 'KZT', 'CNY', 'TRY'];
 export const MAX_ROWS = 7;
 export const MIN_ROWS = 2;
 
 /** Obsolete codes NBKR still lists; hidden from the picker. */
 export const HIDDEN = new Set(['BYR']);
 
-let names: Intl.DisplayNames | null = null;
-try {
-  names = new Intl.DisplayNames(['ru'], { type: 'currency' });
-} catch {
-  names = null;
+const names: Partial<Record<string, Intl.DisplayNames | null>> = {};
+function displayNames(lang: string) {
+  if (!(lang in names)) {
+    try {
+      names[lang] = new Intl.DisplayNames([lang], { type: 'currency' });
+    } catch {
+      names[lang] = null;
+    }
+  }
+  return names[lang];
 }
 
-export function currencyName(code: string): string {
-  if (code === 'XDR') return 'СДР (МВФ)';
-  if (code === 'KGS') return 'Кыргызский сом';
-  const n = names?.of(code);
+const OWN: Record<string, Record<string, string>> = {
+  ru: { XDR: 'СДР (МВФ)', KGS: 'Кыргызский сом' },
+  en: { XDR: 'SDR (IMF)', KGS: 'Kyrgyz som' },
+};
+
+export function currencyName(code: string, lang = 'ru'): string {
+  const own = OWN[lang]?.[code];
+  if (own) return own;
+  const n = displayNames(lang)?.of(code);
   if (!n || n === code) return code;
   return n.charAt(0).toUpperCase() + n.slice(1);
 }

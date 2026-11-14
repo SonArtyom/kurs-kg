@@ -1,30 +1,35 @@
 import './style.css';
+import { convertForDisplay, decimalSeparator, formatInput, formatMinor, KGS_RATE, SCALE, setNumberLocale, toInput } from './money';
+import { applyExprKey, evaluate, hasOp, tokenize } from './expr';
 import {
-  applyKey,
-  convertForDisplay,
-  formatInput,
-  formatMinor,
-  KGS_RATE,
-  parseDecimal,
-  SCALE,
-  toInput,
-} from './money';
-import { currencyDigits, currencyFlag, currencyName, DEFAULT_CODES, HIDDEN, MAX_ROWS, MIN_ROWS } from './currencies';
+  currencyDigits,
+  currencyFlag,
+  currencyName,
+  DEFAULT_CODES,
+  HIDDEN,
+  MAX_ROWS,
+  MIN_ROWS,
+  OLD_DEFAULT_CODES,
+} from './currencies';
 import { isStale, loadCache, refresh, type RatesCache } from './rates';
+import { STRINGS, type Lang } from './i18n';
 
 // ---------- persistent UI state ----------
 interface UiState {
   codes: string[];
   active: string;
+  /** Raw expression typed into the active row; comma decimal, ops + − × ÷. */
   input: string;
 }
 const STATE_KEY = 'kurs.state.v1';
+const LANG_KEY = 'converter.lang';
 
 function loadState(): UiState {
   try {
     const s = JSON.parse(localStorage.getItem(STATE_KEY) ?? 'null') as UiState | null;
     if (s && Array.isArray(s.codes) && s.codes.length >= MIN_ROWS && typeof s.input === 'string') {
-      const codes = s.codes.slice(0, MAX_ROWS);
+      let codes = s.codes.slice(0, MAX_ROWS);
+      if (codes.join() === OLD_DEFAULT_CODES.join()) codes = [...DEFAULT_CODES];
       return { codes, active: codes.includes(s.active) ? s.active : codes[0], input: s.input };
     }
   } catch {
@@ -39,8 +44,19 @@ function saveState() {
     /* ignore */
   }
 }
+function loadLang(): Lang {
+  try {
+    const l = localStorage.getItem(LANG_KEY);
+    if (l === 'ru' || l === 'en') return l;
+  } catch {
+    /* ignore */
+  }
+  return /^(ru|ky|kk|be|uk)\b/i.test(navigator.language) ? 'ru' : 'en';
+}
 
 let state = loadState();
+let lang: Lang = loadLang();
+let t = STRINGS[lang];
 let cache: RatesCache = loadCache();
 let editing = false;
 let loading = false;
@@ -60,62 +76,92 @@ const listEl = $('list');
 const padEl = $('pad');
 const statusEl = $<HTMLButtonElement>('status');
 const editBtn = $<HTMLButtonElement>('edit');
+const langBtn = $<HTMLButtonElement>('lang');
 const sheetEl = $('sheet');
 const searchEl = $<HTMLInputElement>('search');
 const pickerEl = $('picker');
 
 // ---------- values ----------
-function valueFor(code: string): { text: string; empty: boolean } {
-  if (code === state.active) {
-    return state.input === '' ? { text: '0', empty: true } : { text: formatInput(state.input), empty: false };
-  }
-  const amount = parseDecimal(state.input);
+const sizeClass = (text: string) => (text.length > 16 ? ' xs' : text.length > 12 ? ' s' : '');
+
+/** "250 + 1 000,5 ×" — the expression as typed, with grouping and the locale decimal separator. */
+function formatExpr(raw: string): string {
+  return tokenize(raw)
+    .map((tok, i) => (i % 2 ? ` ${tok} ` : formatInput(tok)))
+    .join('')
+    .trim();
+}
+
+function result(code: string): { text: string; empty: boolean } {
+  const amount = evaluate(state.input);
   const from = cache.rates[state.active];
   const to = cache.rates[code];
   if (!from || !to) return { text: '—', empty: true };
-  if (amount === null) return { text: '0', empty: true };
+  if (amount === null) return { text: state.input && hasOp(state.input) ? t.error : '0', empty: true };
   return { text: formatMinor(convertForDisplay(amount, from, to, currencyDigits(code))), empty: false };
+}
+
+/** Collapse the active expression to its value in the target currency's raw input form. */
+function collapsedInput(code: string): string {
+  const amount = evaluate(state.input);
+  const from = cache.rates[state.active];
+  const to = cache.rates[code];
+  if (amount === null || !from || !to) return '';
+  const s = toInput(convertForDisplay(amount, from, to, currencyDigits(code)));
+  return s === '0' ? '' : s;
 }
 
 function activate(code: string) {
   if (code === state.active) return;
-  const amount = parseDecimal(state.input);
-  const from = cache.rates[state.active];
-  const to = cache.rates[code];
-  state.input = amount === null || !from || !to ? '' : toInput(convertForDisplay(amount, from, to, currencyDigits(code)));
-  if (state.input === '0') state.input = '';
+  state.input = collapsedInput(code);
   state.active = code;
   saveState();
   renderList();
 }
 
 // ---------- rendering ----------
-const amountEls = new Map<string, HTMLElement>();
-
-function sizeClass(text: string) {
-  return text.length > 16 ? ' xs' : text.length > 12 ? ' s' : '';
+interface RowNodes {
+  amount: HTMLElement;
+  expr: HTMLElement | null;
 }
+const rowNodes = new Map<string, RowNodes>();
 
 function updateAmounts() {
-  for (const [code, node] of amountEls) {
-    const v = valueFor(code);
-    node.textContent = v.text;
-    node.className = 'amount' + sizeClass(v.text) + (v.empty ? ' placeholder' : '');
+  for (const [code, n] of rowNodes) {
+    if (code === state.active) {
+      const isExpr = hasOp(state.input);
+      if (isExpr) {
+        n.expr!.firstElementChild!.textContent = formatExpr(state.input);
+        const r = result(code);
+        n.amount.textContent = '= ' + r.text;
+        n.amount.className = 'amount result' + sizeClass(r.text);
+      } else {
+        const text = state.input === '' ? '0' : formatExpr(state.input);
+        n.amount.textContent = text;
+        n.amount.className = 'amount typing' + sizeClass(text) + (state.input === '' ? ' placeholder' : '');
+      }
+      n.expr!.hidden = !isExpr;
+    } else {
+      const r = result(code);
+      n.amount.textContent = r.text;
+      n.amount.className = 'amount' + sizeClass(r.text) + (r.empty ? ' placeholder' : '');
+    }
   }
 }
 
 function renderList() {
   listEl.replaceChildren();
-  amountEls.clear();
+  rowNodes.clear();
   state.codes.forEach((code, i) => {
-    const row = el(editing ? 'div' : 'button', 'row' + (!editing && code === state.active ? ' active' : ''));
+    const active = !editing && code === state.active;
+    const row = el(editing ? 'div' : 'button', 'row' + (active ? ' active' : ''));
     if (row instanceof HTMLButtonElement) {
       row.type = 'button';
       row.addEventListener('click', () => activate(code));
     }
     row.append(el('span', 'flag', currencyFlag(code)));
     const cur = el('span', 'cur');
-    cur.append(el('span', 'code', code), el('span', 'name', currencyName(code)));
+    cur.append(el('span', 'code', code), el('span', 'name', currencyName(code, lang)));
     row.append(cur);
 
     if (editing) {
@@ -123,9 +169,9 @@ function renderList() {
       const up = el('button', 'icon-btn', '↑');
       const down = el('button', 'icon-btn', '↓');
       const del = el('button', 'icon-btn del', '✕');
-      up.setAttribute('aria-label', `Поднять ${code}`);
-      down.setAttribute('aria-label', `Опустить ${code}`);
-      del.setAttribute('aria-label', `Удалить ${code}`);
+      up.setAttribute('aria-label', t.up(code));
+      down.setAttribute('aria-label', t.down(code));
+      del.setAttribute('aria-label', t.del(code));
       up.disabled = i === 0;
       down.disabled = i === state.codes.length - 1;
       del.disabled = state.codes.length <= MIN_ROWS;
@@ -135,15 +181,22 @@ function renderList() {
       tools.append(up, down, del);
       row.append(tools);
     } else {
-      const amt = el('span', 'amount');
-      amountEls.set(code, amt);
-      row.append(amt);
+      const box = el('span', 'amount-box');
+      const expr = active ? el('span', 'expr') : null;
+      const amount = el('span', 'amount');
+      if (expr) {
+        expr.append(el('span'));
+        box.append(expr);
+      }
+      box.append(amount);
+      row.append(box);
+      rowNodes.set(code, { amount, expr });
     }
     listEl.append(row);
   });
 
   if (state.codes.length < MAX_ROWS) {
-    const add = el('button', 'add', '+ Добавить валюту');
+    const add = el('button', 'add', t.add);
     add.type = 'button';
     add.onclick = openSheet;
     listEl.append(add);
@@ -162,10 +215,7 @@ function move(i: number, dir: -1 | 1) {
 
 function remove(code: string) {
   if (state.codes.length <= MIN_ROWS) return;
-  if (code === state.active) {
-    const next = state.codes.find((c) => c !== code)!;
-    activate(next);
-  }
+  if (code === state.active) activate(state.codes.find((c) => c !== code)!);
   state.codes = state.codes.filter((c) => c !== code);
   saveState();
   renderList();
@@ -173,39 +223,32 @@ function remove(code: string) {
 
 function setEditing(on: boolean) {
   editing = on;
-  editBtn.textContent = on ? 'Готово' : 'Изменить';
+  editBtn.textContent = on ? t.done : t.edit;
   padEl.hidden = on;
   renderList();
 }
 
 // ---------- status ----------
 const dateFmt = (iso: string) => (iso ? iso.split('-').reverse().join('.') : '—');
-const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-const dayTimeFmt = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const locale = () => (lang === 'ru' ? 'ru-RU' : 'en-GB');
 
 function renderStatus() {
-  const now = Date.now();
-  const stale = isStale(cache, now);
-  const rateDate = `курс на ${dateFmt(cache.dailyDate)}`;
+  const timeFmt = new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' });
+  const dayTimeFmt = new Intl.DateTimeFormat(locale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const rate = t.rateOn(dateFmt(cache.dailyDate));
   let text: string;
   let warn = false;
-  if (loading) {
-    text = `Обновление… · ${rateDate}`;
-  } else if (lastOk === false) {
+  if (loading) text = t.updating(rate);
+  else if (lastOk === false) {
     warn = true;
-    text =
-      cache.fetchedAt === 0
-        ? `Нет связи · встроенные данные, ${rateDate}`
-        : `Нет связи · ${rateDate}, загружен ${dayTimeFmt.format(cache.fetchedAt)}`;
-  } else if (stale) {
+    text = cache.fetchedAt === 0 ? t.offlineBuiltIn(rate) : t.offline(rate, dayTimeFmt.format(cache.fetchedAt));
+  } else if (isStale(cache, Date.now())) {
     warn = true;
-    text = `Данные устарели · ${rateDate}`;
-  } else {
-    text = `${rateDate[0].toUpperCase()}${rateDate.slice(1)} · обновлено ${timeFmt.format(cache.fetchedAt)}`;
-  }
+    text = t.stale(rate);
+  } else text = t.ok(rate, timeFmt.format(cache.fetchedAt));
   statusEl.className = 'status' + (warn ? ' warn' : '') + (loading ? ' loading' : '');
   statusEl.querySelector('.status-text')!.textContent = text;
-  statusEl.title = 'Нажмите, чтобы обновить';
+  statusEl.title = t.tapToRefresh;
 }
 
 async function update() {
@@ -227,26 +270,26 @@ async function update() {
 }
 
 // ---------- keypad ----------
-const KEYS = ['7', '8', '9', '⌫', '4', '5', '6', 'C', '1', '2', '3', '↑', ',', '0', '00', '↓'];
-const FN = new Set(['⌫', 'C', '↑', '↓']);
-const LABELS: Record<string, string> = { '⌫': 'Стереть', C: 'Очистить', '↑': 'Валюта выше', '↓': 'Валюта ниже' };
+const KEYS = ['C', '⌫', '÷', '×', '7', '8', '9', '−', '4', '5', '6', '+', '1', '2', '3', '=', ',', '0', '00', '⇅'];
+const FN = new Set(['C', '⌫', '⇅']);
+const OPK = new Set(['÷', '×', '−', '+']);
+const keyBtns = new Map<string, HTMLButtonElement>();
 
 for (const k of KEYS) {
-  const b = el('button', 'key' + (FN.has(k) ? ' fn' : ''), k);
+  const b = el('button', 'key' + (FN.has(k) ? ' fn' : '') + (OPK.has(k) ? ' op' : '') + (k === '=' ? ' eq' : ''), k);
   b.type = 'button';
-  if (LABELS[k]) b.setAttribute('aria-label', LABELS[k]);
   b.addEventListener('click', () => press(k));
+  keyBtns.set(k, b);
   padEl.append(b);
 }
 
 function press(k: string) {
-  if (k === '↑' || k === '↓') {
+  if (k === '⇅') {
     const i = state.codes.indexOf(state.active);
-    const j = (i + (k === '↑' ? -1 : 1) + state.codes.length) % state.codes.length;
-    activate(state.codes[j]);
+    activate(state.codes[(i + 1) % state.codes.length]);
     return;
   }
-  const next = applyKey(state.input, k, currencyDigits(state.active));
+  const next = k === '=' ? collapsedInput(state.active) : applyExprKey(state.input, k, currencyDigits(state.active));
   if (next === state.input) return;
   state.input = next;
   saveState();
@@ -256,7 +299,19 @@ function press(k: string) {
 // hardware / desktop keyboard
 document.addEventListener('keydown', (e) => {
   if (!sheetEl.hidden || editing) return;
-  const map: Record<string, string> = { Backspace: '⌫', Delete: 'C', Escape: 'C', '.': ',', ArrowUp: '↑', ArrowDown: '↓' };
+  const map: Record<string, string> = {
+    Backspace: '⌫',
+    Delete: 'C',
+    Escape: 'C',
+    '.': ',',
+    '+': '+',
+    '-': '−',
+    '*': '×',
+    '/': '÷',
+    '=': '=',
+    Enter: '=',
+    Tab: '⇅',
+  };
   const k = map[e.key] ?? (/^[\d,]$/.test(e.key) ? e.key : '');
   if (k) {
     e.preventDefault();
@@ -269,13 +324,13 @@ function renderPicker() {
   const q = searchEl.value.trim().toLowerCase();
   const items = Object.keys(cache.rates)
     .filter((c) => !HIDDEN.has(c) && !state.codes.includes(c))
-    .map((c) => ({ code: c, name: currencyName(c) }))
-    .filter((x) => !q || x.code.toLowerCase().includes(q) || x.name.toLowerCase().includes(q))
-    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    .map((c) => ({ code: c, name: currencyName(c, lang), alt: currencyName(c, lang === 'ru' ? 'en' : 'ru') }))
+    .filter((x) => !q || [x.code, x.name, x.alt].some((s) => s.toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name, lang));
 
   pickerEl.replaceChildren();
   if (items.length === 0) {
-    pickerEl.append(el('li', 'empty', 'Ничего не найдено'));
+    pickerEl.append(el('li', 'empty', t.nothing));
     return;
   }
   for (const { code, name } of items) {
@@ -285,7 +340,7 @@ function renderPicker() {
     const cur = el('span', 'cur');
     cur.append(el('span', 'code', code), el('span', 'name', name));
     const perUnit = formatMinor(convertForDisplay(SCALE, cache.rates[code], KGS_RATE, 2));
-    b.append(el('span', 'flag', currencyFlag(code)), cur, el('span', 'rate', `${perUnit} сом`));
+    b.append(el('span', 'flag', currencyFlag(code)), cur, el('span', 'rate', `${perUnit} ${t.kgsUnit}`));
     b.onclick = () => {
       state.codes.push(code);
       saveState();
@@ -311,6 +366,37 @@ function closeSheet(fromPop = false) {
   if (!fromPop && history.state?.sheet) history.back();
 }
 
+// ---------- language ----------
+function applyLang() {
+  t = STRINGS[lang];
+  setNumberLocale(lang);
+  document.documentElement.lang = lang;
+  langBtn.textContent = lang === 'ru' ? 'EN' : 'RU';
+  langBtn.setAttribute('aria-label', t.langToggle);
+  editBtn.textContent = editing ? t.done : t.edit;
+  $('sheet-title').textContent = t.addTitle;
+  $('sheet-close').setAttribute('aria-label', t.close);
+  searchEl.placeholder = t.search;
+  keyBtns.get(',')!.textContent = decimalSeparator();
+  for (const [k, b] of keyBtns) {
+    const label = (t.keys as Record<string, string>)[k];
+    if (label) b.setAttribute('aria-label', label);
+  }
+  renderList();
+  renderStatus();
+  if (!sheetEl.hidden) renderPicker();
+}
+
+langBtn.addEventListener('click', () => {
+  lang = lang === 'ru' ? 'en' : 'ru';
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    /* ignore */
+  }
+  applyLang();
+});
+
 searchEl.addEventListener('input', renderPicker);
 $('sheet-close').addEventListener('click', () => closeSheet());
 sheetEl.querySelector('.sheet-backdrop')!.addEventListener('click', () => closeSheet());
@@ -328,6 +414,5 @@ window.addEventListener('online', () => {
   if (lastOk === false) void update();
 });
 
-renderList();
-renderStatus();
+applyLang();
 void update();

@@ -1,0 +1,51 @@
+export type Lang = 'ru' | 'en';
+
+const RU = {
+  edit: 'Изменить',
+  done: 'Готово',
+  add: '+ Добавить валюту',
+  addTitle: 'Добавить валюту',
+  search: 'Поиск: код или название',
+  nothing: 'Ничего не найдено',
+  close: 'Закрыть',
+  kgsUnit: 'сом',
+  rateOn: (d: string) => `курс НБКР на ${d}`,
+  updating: (r: string) => `Обновление… · ${r}`,
+  offlineBuiltIn: (r: string) => `Нет связи · встроенные данные, ${r}`,
+  offline: (r: string, at: string) => `Нет связи · ${r}, загружен ${at}`,
+  stale: (r: string) => `Данные устарели · ${r}`,
+  ok: (r: string, at: string) => `${r[0].toUpperCase()}${r.slice(1)} · обновлено ${at}`,
+  tapToRefresh: 'Нажмите, чтобы обновить',
+  up: (c: string) => `Поднять ${c}`,
+  down: (c: string) => `Опустить ${c}`,
+  del: (c: string) => `Удалить ${c}`,
+  keys: { '⌫': 'Стереть', C: 'Очистить', '⇅': 'Следующая валюта', '=': 'Равно', '+': 'Плюс', '−': 'Минус', '×': 'Умножить', '÷': 'Разделить' },
+  langToggle: 'Switch to English',
+  error: 'Ошибка',
+};
+
+const EN: typeof RU = {
+  edit: 'Edit',
+  done: 'Done',
+  add: '+ Add currency',
+  addTitle: 'Add currency',
+  search: 'Search: code or name',
+  nothing: 'Nothing found',
+  close: 'Close',
+  kgsUnit: 'KGS',
+  rateOn: (d) => `NBKR rate for ${d}`,
+  updating: (r) => `Updating… · ${r}`,
+  offlineBuiltIn: (r) => `Offline · built-in data, ${r}`,
+  offline: (r, at) => `Offline · ${r}, loaded ${at}`,
+  stale: (r) => `Data is outdated · ${r}`,
+  ok: (r, at) => `${r} · updated ${at}`,
+  tapToRefresh: 'Tap to refresh',
+  up: (c) => `Move ${c} up`,
+  down: (c) => `Move ${c} down`,
+  del: (c) => `Remove ${c}`,
+  keys: { '⌫': 'Backspace', C: 'Clear', '⇅': 'Next currency', '=': 'Equals', '+': 'Plus', '−': 'Minus', '×': 'Multiply', '÷': 'Divide' },
+  langToggle: 'Переключить на русский',
+  error: 'Error',
+};
+
+export const STRINGS: Record<Lang, typeof RU> = { ru: RU, en: EN };

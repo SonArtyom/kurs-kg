@@ -5,8 +5,11 @@
   --text: #101318;
   --muted: #6b7280;
   --line: #dfe2e7;
-  --accent: #0f9d74;
-  --accent-soft: rgba(15, 157, 116, 0.1);
+  --accent: #2f5bea;
+  --accent-soft: rgba(47, 91, 234, 0.09);
+  --op: #dfe7ff;
+  --op-text: #2f5bea;
+  --on-accent: #ffffff;
   --warn: #b7791f;
   --warn-soft: rgba(214, 158, 46, 0.14);
   --danger: #d93838;
@@ -26,8 +29,11 @@
     --text: #f1f3f6;
     --muted: #8d95a3;
     --line: #262b33;
-    --accent: #34d3a0;
-    --accent-soft: rgba(52, 211, 160, 0.12);
+    --accent: #6c9bff;
+    --accent-soft: rgba(108, 155, 255, 0.13);
+    --op: #1e2a4a;
+    --op-text: #8fb3ff;
+    --on-accent: #0a1330;
     --warn: #f2b84b;
     --warn-soft: rgba(242, 184, 75, 0.13);
     --danger: #ff6b6b;
@@ -93,6 +99,22 @@ h1 {
   font-size: 16px;
   padding: 8px 4px 8px 12px;
 }
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lang-btn {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  min-width: 44px;
+  min-height: 36px;
+}
 .status {
   margin-top: 4px;
   display: inline-flex;
@@ -147,7 +169,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: clamp(48px, 6.6dvh, 64px);
+  min-height: clamp(46px, 6.4dvh, 64px);
   padding: 4px 14px;
   background: var(--surface);
   border-radius: 16px;
@@ -186,8 +208,30 @@ h1 {
   text-overflow: ellipsis;
   max-width: 34vw;
 }
-.amount {
+.amount-box {
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.expr {
+  font-size: 14px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  direction: rtl;
+}
+.expr > span {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.amount {
   font-size: 26px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -210,6 +254,12 @@ h1 {
 }
 .row.active .amount {
   color: var(--accent);
+}
+.row.active .amount.result::after {
+  display: none;
+}
+.row.active .amount.result {
+  font-size: 22px;
 }
 .row.active .amount::after {
   content: '';
@@ -269,7 +319,7 @@ h1 {
   display: none;
 }
 .key {
-  height: clamp(46px, 6.8dvh, 60px);
+  height: clamp(42px, 6dvh, 58px);
   border-radius: 14px;
   background: var(--key);
   box-shadow: var(--shadow);
@@ -278,6 +328,16 @@ h1 {
   display: grid;
   place-items: center;
   transition: transform 0.06s, background 0.12s;
+}
+.key.op {
+  background: var(--op);
+  color: var(--op-text);
+  font-size: 28px;
+}
+.key.eq {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 28px;
 }
 .key.fn {
   background: var(--key-2);

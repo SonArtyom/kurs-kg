@@ -47,18 +47,18 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/KursKG.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Converter.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KursKG-apk
-          path: KursKG.apk
+          name: Converter.apk
+          path: Converter.apk
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" KursKG.apk --title "Курс НБКР $GITHUB_REF_NAME" \
-            --notes "Конвертер валют по официальному курсу НБКР. Скачайте KursKG.apk и установите на Android." \
-            || gh release upload "$GITHUB_REF_NAME" KursKG.apk --clobber
+          gh release create "$GITHUB_REF_NAME" Converter.apk --title "Converter $GITHUB_REF_NAME" \
+            --notes "Конвертер валют по официальному курсу НБКР (RU/EN, калькулятор в полях). Скачайте Converter.apk и установите на Android." \
+            || gh release upload "$GITHUB_REF_NAME" Converter.apk --clobber
